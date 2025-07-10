@@ -1,0 +1,60 @@
+name: ci_build
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select the environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - stg
+          - dpp
+          - itg
+          - pjt
+
+jobs:
+  ci_build:
+    runs-on: windows-latest
+    steps:
+      - run: echo "branch head_ref ${{github.head_ref}}"
+      - run: echo "select environment ${{github.event.inputs.environment}}"
+      - run: echo "runner.runner.os ${{runner.os}}"
+      - name: Send Push on Success
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          GIT_USER: ${{ github.actor }}
+        run: |
+          $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
+          $branch = "${{ github.ref_name }}"
+          $user = $env:GIT_USER
+          $body = @{
+            title = "✅ 빌드 성공"
+            body  = "브랜치: $branch 사용자: $user가 ${{ github.event.inputs.environment }} 빌드에 성공했습니다."
+          } | ConvertTo-Json -Compress
+
+          Invoke-RestMethod -Uri $url `
+                            -Method Post `
+                            -Body $body `
+                            -ContentType "application/json"
+
+      - name: Send Push on Failure
+        if: ${{ failure() }}
+        shell: pwsh
+        env:
+          GIT_USER: ${{ github.actor }}
+        run: |
+          $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
+          $branch = "${{ github.ref_name }}"
+          $user = $env:GIT_USER
+          $body = @{
+            title = "❌ 빌드 실패"
+            body  = "브랜치: $branch 사용자: $user가 ${{ github.event.inputs.environment }} 빌드에 실패했습니다."
+          } | ConvertTo-Json -Compress
+
+          Invoke-RestMethod -Uri $url `
+                            -Method Post `
+                            -Body $body `
+                            -ContentType "application/json"
