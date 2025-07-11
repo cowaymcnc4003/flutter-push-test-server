@@ -35,7 +35,7 @@ jobs:
         Write-Host "Branch Name: $branch"
 
         # **핵심 수정: ${githubActor}와 같이 중괄호를 사용합니다.**
-        $messageBody = "빌드: $selectedEnvironment`n브랜치: $branch`n사용자: ${githubActor}가`n빌드에 성공했습니다." 
+        $messageBody = "빌드: $selectedEnvironment`n브랜치: $branch`n사용자: ${githubActor}`n빌드에 성공했습니다." 
         Write-Host "Complete Message Body: $messageBody" # 최종 메시지 확인
 
         $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
