@@ -25,40 +25,21 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "GIT_USER is: $env:GIT_USER"
-      - name: Send Push on Success
-        if: ${{ success() }}
-        shell: pwsh
-        env:
-          GIT_USER: ${{ github.actor }}
-        run: |
-          $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
-          $branch = "${{ github.ref_name }}"
-          $user = $env:GIT_USER
-          $body = @{
-            title = "✅ 빌드 성공"
-            body  = "브랜치: $branch 사용자: $user가 ${{ github.event.inputs.environment }} 빌드에 성공했습니다."
-          } | ConvertTo-Json -Compress
-
-          Invoke-RestMethod -Uri $url `
-                            -Method Post `
-                            -Body $body `
-                            -ContentType "application/json"
-
-      - name: Send Push on Failure
-        if: ${{ failure() }}
-        shell: pwsh
-        env:
-          GIT_USER: ${{ github.actor }}
-        run: |
-          $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
-          $branch = "${{ github.ref_name }}"
-          $user = $env:GIT_USER
-          $body = @{
-            title = "❌ 빌드 실패"
-            body  = "브랜치: $branch 사용자: $user가 ${{ github.event.inputs.environment }} 빌드에 실패했습니다."
-          } | ConvertTo-Json -Compress
-
-          Invoke-RestMethod -Uri $url `
-                            -Method Post `
-                            -Body $body `
-                            -ContentType "application/json"
+          - name: Send Push on Success
+          shell: pwsh
+          env:
+            GIT_BRANCH: ${{ github.ref_name }}
+            GIT_USER: ${{ github.actor }}
+            ENV_NAME: ${{ github.event.inputs.environment }}
+          run: |
+            $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
+            $body = @{
+              title = "✅ 빌드 성공"
+              body  = "브랜치: $env:GIT_BRANCH 사용자: $env:GIT_USER가 $env:ENV_NAME 빌드에 성공했습니다."
+            } | ConvertTo-Json -Compress
+        
+            Invoke-RestMethod -Uri $url `
+                              -Method Post `
+                              -Body $body `
+                              -ContentType "application/json"
+        
