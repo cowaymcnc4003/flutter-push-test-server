@@ -17,40 +17,35 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest # Or ubuntu-latest for Linux runners
+    runs-on: windows-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Get GitHub Actor and Send Push in PowerShell
-      shell: pwsh # Specifies PowerShell Core (pwsh) as the shell
+      shell: pwsh
       run: |
         $githubActor = "${{ github.actor }}"
-        $selectedEnvironment = "${{ github.event.inputs.environment }}" # <-- 이 부분을 추가
+        $selectedEnvironment = "${{ github.event.inputs.environment }}"
+        $branch = "${{ github.ref_name }}" # ref_name도 PowerShell 변수로 가져오는 것이 안전합니다.
 
         Write-Host "The GitHub Actions actor is: $githubActor"
-        Write-Host "Selected Environment: $selectedEnvironment" # 디버깅용
+        Write-Host "Selected Environment: $selectedEnvironment"
+        Write-Host "Branch Name: $branch" # 디버깅용
 
-        # You can use this variable for further logic
-        if ($githubActor -eq "your-username") {
-            Write-Host "Hello, you triggered this workflow!"
-        } else {
-            Write-Host "Someone else triggered this workflow."
-        }
+        # PowerShell 변수를 사용하여 메시지 문자열을 먼저 완전하게 구성합니다.
+        $messageBody = "브랜치: $branch 사용자: $githubActor가 $selectedEnvironment 빌드에 성공했습니다."
+        Write-Host "Complete Message Body: $messageBody" # 디버깅용: 최종 메시지 확인
 
         $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
-        $branch = "${{ github.ref_name }}"
         
-        # PowerShell 변수를 사용하여 문자열 구성
-        $bodyContent = "브랜치: $branch 사용자: $githubActor가 $selectedEnvironment 빌드에 성공했습니다." 
-
         $body = @{
           title = "✅ 빌드 성공"
-          body  = $bodyContent # <-- 여기를 수정
+          body  = $messageBody # 미리 구성된 PowerShell 변수를 여기에 사용합니다.
         } | ConvertTo-Json -Compress
         
-        Write-Host "Sending JSON Body: $body" # 디버깅용
+        Write-Host "Sending JSON Body: $body"
 
         Invoke-RestMethod -Uri $url `
                           -Method Post `
