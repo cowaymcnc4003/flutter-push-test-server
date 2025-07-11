@@ -14,6 +14,7 @@ on:
           - dpp
           - itg
           - pjt
+
 jobs:
   build:
     runs-on: windows-latest # Or ubuntu-latest for Linux runners
@@ -22,24 +23,34 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Get GitHub Actor in PowerShell
+    - name: Get GitHub Actor and Send Push in PowerShell
       shell: pwsh # Specifies PowerShell Core (pwsh) as the shell
       run: |
         $githubActor = "${{ github.actor }}"
+        $selectedEnvironment = "${{ github.event.inputs.environment }}" # <-- 이 부분을 추가
+
         Write-Host "The GitHub Actions actor is: $githubActor"
-        
+        Write-Host "Selected Environment: $selectedEnvironment" # 디버깅용
+
         # You can use this variable for further logic
         if ($githubActor -eq "your-username") {
             Write-Host "Hello, you triggered this workflow!"
         } else {
             Write-Host "Someone else triggered this workflow."
         }
+
         $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
         $branch = "${{ github.ref_name }}"
+        
+        # PowerShell 변수를 사용하여 문자열 구성
+        $bodyContent = "브랜치: $branch 사용자: $githubActor가 $selectedEnvironment 빌드에 성공했습니다." 
+
         $body = @{
           title = "✅ 빌드 성공"
-          body  = "브랜치: $branch 사용자: $githubActor가 ${{ github.event.inputs.environment }} 빌드에 성공했습니다."
+          body  = $bodyContent # <-- 여기를 수정
         } | ConvertTo-Json -Compress
+        
+        Write-Host "Sending JSON Body: $body" # 디버깅용
 
         Invoke-RestMethod -Uri $url `
                           -Method Post `
