@@ -34,3 +34,14 @@ jobs:
         } else {
             Write-Host "Someone else triggered this workflow."
         }
+        $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
+        $branch = "${{ github.ref_name }}"
+        $body = @{
+          title = "✅ 빌드 성공"
+          body  = "브랜치: $branch 사용자: $githubActor가 ${{ github.event.inputs.environment }} 빌드에 성공했습니다."
+        } | ConvertTo-Json -Compress
+
+        Invoke-RestMethod -Uri $url `
+                          -Method Post `
+                          -Body $body `
+                          -ContentType "application/json"
