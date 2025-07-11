@@ -28,21 +28,21 @@ jobs:
       run: |
         $githubActor = "${{ github.actor }}"
         $selectedEnvironment = "${{ github.event.inputs.environment }}"
-        $branch = "${{ github.ref_name }}" # ref_name도 PowerShell 변수로 가져오는 것이 안전합니다.
+        $branch = "${{ github.ref_name }}"
 
         Write-Host "The GitHub Actions actor is: $githubActor"
         Write-Host "Selected Environment: $selectedEnvironment"
-        Write-Host "Branch Name: $branch" # 디버깅용
+        Write-Host "Branch Name: $branch"
 
-        # PowerShell 변수를 사용하여 메시지 문자열을 먼저 완전하게 구성합니다.
-        $messageBody = "브랜치: $branch 사용자: $githubActor가 $selectedEnvironment 빌드에 성공했습니다."
-        Write-Host "Complete Message Body: $messageBody" # 디버깅용: 최종 메시지 확인
+        # **핵심 수정: ${githubActor}와 같이 중괄호를 사용합니다.**
+        $messageBody = "브랜치: $branch 사용자: ${githubActor}가 $selectedEnvironment 빌드에 성공했습니다." 
+        Write-Host "Complete Message Body: $messageBody" # 최종 메시지 확인
 
         $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
         
         $body = @{
           title = "✅ 빌드 성공"
-          body  = $messageBody # 미리 구성된 PowerShell 변수를 여기에 사용합니다.
+          body  = $messageBody
         } | ConvertTo-Json -Compress
         
         Write-Host "Sending JSON Body: $body"
