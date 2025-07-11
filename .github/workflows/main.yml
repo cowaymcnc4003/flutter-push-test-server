@@ -1,4 +1,5 @@
 name: ci_build
+
 on:
   workflow_dispatch:
     inputs:
@@ -18,28 +19,32 @@ jobs:
   ci_build:
     runs-on: windows-latest
     steps:
-      - run: echo "branch head_ref ${{github.head_ref}}"
-      - run: echo "select environment ${{github.event.inputs.environment}}"
-      - run: echo "runner.runner.os ${{runner.os}}"
+      - run: echo "branch head_ref ${{ github.head_ref }}"
+      - run: echo "select environment ${{ github.event.inputs.environment }}"
+      - run: echo "runner.runner.os ${{ runner.os }}"
+
       - name: Debug GitHub Actor
         shell: pwsh
+        env:
+          GIT_USER: ${{ github.actor }}
         run: |
           Write-Host "GIT_USER is: $env:GIT_USER"
-          - name: Send Push on Success
-          shell: pwsh
-          env:
-            GIT_BRANCH: ${{ github.ref_name }}
-            GIT_USER: ${{ github.actor }}
-            ENV_NAME: ${{ github.event.inputs.environment }}
-          run: |
-            $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
-            $body = @{
-              title = "✅ 빌드 성공"
-              body  = "브랜치: $env:GIT_BRANCH 사용자: $env:GIT_USER가 $env:ENV_NAME 빌드에 성공했습니다."
-            } | ConvertTo-Json -Compress
-        
-            Invoke-RestMethod -Uri $url `
-                              -Method Post `
-                              -Body $body `
-                              -ContentType "application/json"
-        
+
+      - name: Send Push on Success
+        if: ${{ success() }}
+        shell: pwsh
+        env:
+          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_USER: ${{ github.actor }}
+          ENV_NAME: ${{ github.event.inputs.environment }}
+        run: |
+          $url = "https://sendpush-iadldraf3a-uc.a.run.app/broadcast"
+          $body = @{
+            title = "✅ 빌드 성공"
+            body  = "브랜치: $env:GIT_BRANCH 사용자: $env:GIT_USER가 $env:ENV_NAME 빌드에 성공했습니다."
+          } | ConvertTo-Json -Compress
+
+          Invoke-RestMethod -Uri $url `
+                            -Method Post `
+                            -Body $body `
+                            -ContentType "application/json"
