@@ -1,11 +1,15 @@
-const { setGlobalOptions } = require("firebase-functions");
-const { onRequest } = require("firebase-functions/https");
+const functions = require("firebase-functions");
+const { onRequest } = functions.https;
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const express = require("express");
+exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
 admin.initializeApp();
-setGlobalOptions({ maxInstances: 10 });
+
+functions.setGlobalOptions({
+  maxInstances: 10,
+});
 
 const app = express();
 app.use(express.json());
@@ -35,7 +39,7 @@ app.post("/", async (req, res) => {
 });
 
 // 전체 사용자에게 푸시 보내기
-app.post("/broadcast", async (req, res) => {
+app.post("/broadcast/all", async (req, res) => {
   try {
     const { title, body } = req.body;
 
@@ -96,6 +100,79 @@ app.post("/broadcast", async (req, res) => {
   } catch (error) {
     logger.error("전체 푸시 전송 실패:", error);
     res.status(500).send("전체 푸시 전송 실패");
+  }
+});
+
+
+app.post("/broadcast", async (req, res) => {
+  try {
+    const { title, body } = req.body;
+
+    if (!title || !body) {
+      return res.status(400).send("title, body가 필요합니다.");
+    }
+
+    // userInfos 조회
+    const userInfosSnap = await admin.database().ref("/userInfos").once("value");
+    if (!userInfosSnap.exists()) {
+      return res.status(404).send("userInfos가 비어 있습니다.");
+    }
+
+    const userInfos = userInfosSnap.val();
+
+    const targetUserIds = Object.entries(userInfos)
+      .filter(([_, userData]) =>
+        typeof userData.groups === "object" &&
+        userData.groups["클라이언트"] === true,
+      )
+      .map(([userKey]) => userKey);
+
+    if (targetUserIds.length === 0) {
+      return res.status(404).send("클라이언트 그룹 사용자가 없습니다.");
+    }
+
+    // userTokens에서 해당 유저들의 FCM 토큰 추출
+    const tokensSnap = await admin.database().ref("/userTokens").once("value");
+    const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
+
+    const tokens = Object.values(tokensData)
+      .filter((entry) => targetUserIds.includes(entry.id)) // 사용자 이름 기준 매칭
+      .map((entry) => entry.fcmToken)
+      .filter((token) => typeof token === "string" && token.length > 0);
+
+    if (tokens.length === 0) {
+      return res.status(404).send("해당 그룹에 유효한 푸시 토큰이 없습니다.");
+    }
+
+    // 푸시 전송
+    const BATCH_SIZE = 500;
+    let successCount = 0;
+    let failureCount = 0;
+    const failedTokens = [];
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batchTokens = tokens.slice(i, i + BATCH_SIZE);
+      const message = {
+        notification: { title, body },
+        tokens: batchTokens,
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      successCount += response.successCount;
+      failureCount += response.failureCount;
+
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) failedTokens.push(batchTokens[idx]);
+      });
+    }
+
+    logger.info(`클라이언트 그룹 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
+
+    res.status(200).json({ successCount, failureCount, failedTokens });
+  } catch (error) {
+    logger.error("클라이언트 그룹 푸시 실패:", error);
+    res.status(500).send("클라이언트 그룹 푸시 실패");
   }
 });
 
