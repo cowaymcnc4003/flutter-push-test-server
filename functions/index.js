@@ -5,7 +5,10 @@ const admin = require("firebase-admin");
 const express = require("express");
 exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
-admin.initializeApp();
+// ✅ 이미 초기화된 경우 다시 하지 않음
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 functions.setGlobalOptions({
   maxInstances: 10,

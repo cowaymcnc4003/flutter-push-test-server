@@ -5,6 +5,7 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
+// ✅ 여기서도 꼭 중복 초기화 방지!
 if (!admin.apps.length) {
   admin.initializeApp();
 }
