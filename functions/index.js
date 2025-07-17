@@ -3,7 +3,6 @@ const { onRequest } = functions.https;
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const express = require("express");
-const cors = require("cors"); // ✅ CORS 모듈 추가
 exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
 // ✅ 이미 초기화된 경우 다시 하지 않음
@@ -16,11 +15,9 @@ functions.setGlobalOptions({
 });
 
 const app = express();
-app.use(express.json());
-
-// ✅ CORS 미들웨어 설정 (모든 origin 허용)
+const cors = require("cors");
 app.use(cors());
-app.options("*", cors()); // ✅ preflight OPTIONS 요청 허용
+app.use(express.json());
 
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
