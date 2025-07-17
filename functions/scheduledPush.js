@@ -5,14 +5,16 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
+// 요일 매핑 (일~토)
+const weekDayKorMap = ["일", "월", "화", "수", "목", "금", "토"];
 
-// every 1 minutes
-// every 30 minutes
 exports.scheduledPush = onSchedule("every 30 minutes", async (event) => {
   console.log("30분마다 실행되는 스케줄 함수");
-  const now = dayjs().utcOffset(9);
+  const now = dayjs().utcOffset(9); // 한국시간 기준
   const today = now.format("YYYY-MM-DD");
   const currentTime = now.format("HH:mm");
+  const todayWeekDayKor = weekDayKorMap[now.day()]; // 오늘 요일 한글 (예: 월)
+
   const db = admin.database();
 
   try {
@@ -22,13 +24,25 @@ exports.scheduledPush = onSchedule("every 30 minutes", async (event) => {
     }
 
     const schedules = schedulesSnap.val();
-    const dueSchedules = Object.values(schedules).filter(
-      (s) =>
-        !s.isSent &&
-        today >= s.startTime &&
-        today <= s.endTime &&
-        s.scheduleAt === currentTime,
-    );
+
+    const dueSchedules = Object.values(schedules).filter((s) => {
+      if (s.isSent) return false; // 이미 전송 완료된 것은 제외
+      if (today < s.startTime || today > s.endTime) return false; // 날짜 범위 밖
+      if (s.scheduleAt !== currentTime) return false; // 예약 시간과 다름
+
+      // repeat 타입에 따른 추가 조건
+      if (s.repeat === "daily") {
+        // 매일 반복이면 무조건 true
+        return true;
+      } else if (s.repeat === "weekly") {
+        // 요일 배열이 존재해야 하고 오늘 요일이 포함되어야 함
+        if (!Array.isArray(s.scheduleDays)) return false;
+        return s.scheduleDays.includes(todayWeekDayKor);
+      }
+
+      // repeat가 없는 경우는 무시하거나 필요하면 처리
+      return false;
+    });
 
     if (dueSchedules.length === 0) return null;
 
