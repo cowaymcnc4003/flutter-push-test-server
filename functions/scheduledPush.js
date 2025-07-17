@@ -5,6 +5,10 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 // 요일 매핑 (일~토)
 const weekDayKorMap = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -17,33 +21,31 @@ exports.scheduledPush = onSchedule(
     const today = now.format("YYYY-MM-DD");
     const currentTime = now.format("HH:mm");
     const todayWeekDayKor = weekDayKorMap[now.day()];
-
     const db = admin.database();
 
     try {
       const schedulesSnap = await db.ref("/pushSchedules").once("value");
-      if (!schedulesSnap.exists()) {
-        return null;
-      }
+      if (!schedulesSnap.exists()) return null;
 
       const schedules = schedulesSnap.val();
 
       const dueSchedules = Object.values(schedules).filter((s) => {
-        if (s.isSent) return false; // 이미 전송 완료된 것은 제외
-        if (today < s.startTime || today > s.endTime) return false; // 날짜 범위 밖
-        if (s.scheduleAt !== currentTime) return false; // 예약 시간과 다름
+        if (s.isSent && s.repeat === "none") return false; // 단발성이고 이미 전송 완료
+        if (today < s.startTime || today > s.endTime) return false;
+        if (s.scheduleAt !== currentTime) return false;
 
-        // repeat 타입에 따른 추가 조건
-        if (s.repeat === "daily") {
-          // 매일 반복이면 무조건 true
-          return true;
-        } else if (s.repeat === "weekly") {
-          // 요일 배열이 존재해야 하고 오늘 요일이 포함되어야 함
+        if (s.repeat === "daily") return true;
+
+        if (s.repeat === "weekly") {
           if (!Array.isArray(s.scheduleDays)) return false;
           return s.scheduleDays.includes(todayWeekDayKor);
         }
 
-        // repeat가 없는 경우는 무시하거나 필요하면 처리
+        // repeat 없거나 none일 경우 오늘이 startTime인 경우만 전송
+        if (!s.repeat || s.repeat === "none") {
+          return today === s.startTime;
+        }
+
         return false;
       });
 
@@ -78,19 +80,24 @@ exports.scheduledPush = onSchedule(
           continue;
         }
 
-        // 푸시 전송
         const message = {
-          notification: { title: schedule.title, body: schedule.message },
+          notification: {
+            title: schedule.title,
+            body: schedule.message,
+          },
           tokens,
         };
 
         const res = await admin.messaging().sendEachForMulticast(message);
+
         functions.logger.info(
-          `푸시 전송: ${schedule.title} (성공 ${res.successCount}, 실패 ${res.failureCount})`,
+          `푸시 전송 완료: ${schedule.title} / ${currentTime} / 성공 ${res.successCount}, 실패 ${res.failureCount}`,
         );
 
-        // 전송 완료되면 isSent true로 마킹
-        await db.ref(`/pushSchedules/${schedule.id}/isSent`).set(true);
+        // 단일 전송일 경우에만 isSent 마킹
+        if (!schedule.repeat || schedule.repeat === "none") {
+          await db.ref(`/pushSchedules/${schedule.id}/isSent`).set(true);
+        }
       }
 
       return null;
@@ -98,4 +105,5 @@ exports.scheduledPush = onSchedule(
       functions.logger.error("스케줄 푸시 오류", err);
       return null;
     }
-  });
+  },
+);
