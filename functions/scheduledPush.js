@@ -5,6 +5,8 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
+
+// every 1 minutes
 // every 30 minutes
 exports.scheduledPush = onSchedule("every 30 minutes", async (event) => {
   console.log("30분마다 실행되는 스케줄 함수");
