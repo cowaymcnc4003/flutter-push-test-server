@@ -3,6 +3,7 @@ const { onRequest } = functions.https;
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
 const express = require("express");
+const cors = require("cors"); // ✅ CORS 모듈 추가
 exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
 // ✅ 이미 초기화된 경우 다시 하지 않음
@@ -16,6 +17,10 @@ functions.setGlobalOptions({
 
 const app = express();
 app.use(express.json());
+
+// ✅ CORS 미들웨어 설정 (모든 origin 허용)
+app.use(cors());
+app.options("*", cors()); // ✅ preflight OPTIONS 요청 허용
 
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
@@ -176,6 +181,61 @@ app.post("/broadcast", async (req, res) => {
   } catch (error) {
     logger.error("클라이언트 그룹 푸시 실패:", error);
     res.status(500).send("클라이언트 그룹 푸시 실패");
+  }
+});
+
+
+app.post("/broadcast/users", async (req, res) => {
+  try {
+    const { ids, title, body } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0 || !title || !body) {
+      return res.status(400).send("ids (배열), title, body가 필요합니다.");
+    }
+
+    // RTDB에서 userTokens 가져오기
+    const tokensSnap = await admin.database().ref("/userTokens").once("value");
+    const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
+
+    // 선택된 ID 목록에 해당하는 토큰만 추출
+    const tokens = Object.values(tokensData)
+      .filter((entry) => ids.includes(entry.id))
+      .map((entry) => entry.fcmToken)
+      .filter((token) => typeof token === "string" && token.length > 0);
+
+    if (tokens.length === 0) {
+      return res.status(404).send("해당 ID에 해당하는 유효한 푸시 토큰이 없습니다.");
+    }
+
+    // 푸시 전송
+    const BATCH_SIZE = 500;
+    let successCount = 0;
+    let failureCount = 0;
+    const failedTokens = [];
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batchTokens = tokens.slice(i, i + BATCH_SIZE);
+      const message = {
+        notification: { title, body },
+        tokens: batchTokens,
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      successCount += response.successCount;
+      failureCount += response.failureCount;
+
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) failedTokens.push(batchTokens[idx]);
+      });
+    }
+
+    logger.info(`지정 사용자 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
+
+    res.status(200).json({ successCount, failureCount, failedTokens });
+  } catch (error) {
+    logger.error("지정 사용자 푸시 실패:", error);
+    res.status(500).send("지정 사용자 푸시 실패");
   }
 });
 
