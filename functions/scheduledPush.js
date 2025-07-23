@@ -82,7 +82,7 @@ exports.scheduledPush = onSchedule(
         }
 
         const message = {
-          notification: {
+          data: {
             title: schedule.title,
             body: schedule.message,
           },

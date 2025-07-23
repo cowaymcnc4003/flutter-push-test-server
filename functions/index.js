@@ -30,7 +30,7 @@ app.post("/", async (req, res) => {
     }
 
     const message = {
-      notification: { title, body },
+      data: { title, body },
       token,
     };
 
@@ -80,7 +80,7 @@ app.post("/broadcast/all", async (req, res) => {
       const batchTokens = tokens.slice(i, i + BATCH_SIZE);
 
       const message = {
-        notification: { title, body },
+        data: { title, body },
         tokens: batchTokens,
       };
 
@@ -158,7 +158,7 @@ app.post("/broadcast", async (req, res) => {
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batchTokens = tokens.slice(i, i + BATCH_SIZE);
       const message = {
-        notification: { title, body },
+        data: { title, body },
         tokens: batchTokens,
       };
 
@@ -213,7 +213,7 @@ app.post("/broadcast/users", async (req, res) => {
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batchTokens = tokens.slice(i, i + BATCH_SIZE);
       const message = {
-        notification: { title, body },
+        data: { title, body },
         tokens: batchTokens,
       };
 
@@ -287,7 +287,7 @@ app.post("/broadcast/group", async (req, res) => {
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batchTokens = tokens.slice(i, i + BATCH_SIZE);
       const message = {
-        notification: { title, body },
+        data: { title, body },
         tokens: batchTokens,
       };
 
