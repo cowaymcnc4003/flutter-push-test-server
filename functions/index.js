@@ -23,8 +23,9 @@ app.use(express.json());
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
   try {
-    let { token, title, body, senderId, receiverId } = req.body;
+    let { token, title, body, userId, receiverId } = req.body;
     logger.info("req.body:", req.body);
+    let senderId = userId;
 
     if (!token || !title || !body) {
       return res.status(400).send("token, title, body가 필요합니다.");
@@ -60,7 +61,8 @@ app.post("/", async (req, res) => {
 
 app.post("/broadcast/all", async (req, res) => {
   try {
-    const { title, body, senderId } = req.body;
+    const { title, body, userId } = req.body;
+    const senderId = userId;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -137,7 +139,8 @@ app.post("/broadcast/all", async (req, res) => {
 
 app.post("/broadcast", async (req, res) => {
   try {
-    const { title, body, senderId } = req.body;
+    const { title, body, userId } = req.body;
+    const senderId = userId;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -219,7 +222,8 @@ app.post("/broadcast", async (req, res) => {
 
 app.post("/broadcast/users", async (req, res) => {
   try {
-    const { ids, title, body, senderId } = req.body;
+    const { ids, title, body, userId } = req.body;
+    const senderId = userId;
 
     if (!Array.isArray(ids) || ids.length === 0 || !title || !body) {
       return res.status(400).send("ids (배열), title, body가 필요합니다.");
@@ -282,7 +286,9 @@ app.post("/broadcast/users", async (req, res) => {
 
 app.post("/broadcast/group", async (req, res) => {
   try {
-    const { title, body, groups, senderId } = req.body;
+    const { title, body, groups, userId } = req.body;
+
+    const senderId = userId;
 
     if (!title || !body || !Array.isArray(groups) || groups.length === 0) {
       return res.status(400).send("title, body, groups 배열이 필요합니다.");

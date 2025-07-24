@@ -92,9 +92,13 @@ exports.scheduledPush = onSchedule(
           `푸시 전송 완료: ${schedule.title} / ${currentTime} / 성공 ${res.successCount}, 실패 ${res.failureCount}`,
         );
 
-        // 푸시 보낸 기록 RTDB에 저장
+        // ✅ senderId: 스케줄에 userId가 있으면 사용, 없으면 "시스템"
+        const senderId = typeof schedule.userId === "string" && schedule.userId.trim() !== "" ?
+          schedule.userId :
+          "시스템";
+
         await db.ref("/pushMessages").push({
-          senderId: "시스템", // 필요 시 변경 가능
+          senderId,
           receiverGroup: schedule.target,
           title: schedule.title,
           body: schedule.message,
