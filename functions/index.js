@@ -371,8 +371,12 @@ app.post("/broadcast/group", async (req, res) => {
   }
 });
 
-app.get("/push/history/:id", async (req, res) => {
-  const id = req.params.id;
+app.post("/push/history", async (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    return res.status(400).send("id가 필요합니다.");
+  }
 
   try {
     const snapshot = await admin.database().ref("/pushMessages").once("value");
