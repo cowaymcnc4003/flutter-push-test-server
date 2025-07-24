@@ -23,16 +23,12 @@ app.use(express.json());
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
   try {
-    let { token, title, body, id, receiverId } = req.body;
+    const { token, title, body } = req.body;
     logger.info("req.body:", req.body);
-    let senderId = id;
 
     if (!token || !title || !body) {
       return res.status(400).send("token, title, body가 필요합니다.");
     }
-
-    senderId = typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자";
-    receiverId = typeof receiverId === "string" && receiverId.trim() !== "" ? receiverId : "unknown";
 
     const message = {
       data: { title, body },
@@ -41,15 +37,6 @@ app.post("/", async (req, res) => {
 
     const response = await admin.messaging().send(message);
     logger.info("푸시 전송 성공:", response);
-
-    // DB 저장 (보낸사람 / 받는사람 기록)
-    await admin.database().ref("/pushMessages").push({
-      senderId,
-      receiverIds: [receiverId], // 단일 수신자라도 배열로 저장
-      title,
-      body,
-      timestamp: Date.now(),
-    });
 
     res.status(200).send("푸시 전송 성공");
   } catch (error) {
