@@ -10,7 +10,6 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// 요일 매핑 (일~토)
 const weekDayKorMap = ["일", "월", "화", "수", "목", "금", "토"];
 
 exports.scheduledPush = onSchedule(
@@ -42,7 +41,6 @@ exports.scheduledPush = onSchedule(
           return s.scheduleDays.includes(todayWeekDayKor);
         }
 
-        // repeat 없거나 none일 경우 오늘이 startTime인 경우만 전송
         if (!s.repeat || s.repeat === "none") {
           return today === s.startTime;
         }
@@ -64,7 +62,6 @@ exports.scheduledPush = onSchedule(
         if (schedule.target === "All") {
           tokens = Object.values(userTokens).map((u) => u.fcmToken);
         } else {
-          // 그룹 필터링
           const targetUserIds = Object.entries(userInfos)
             .filter(([_, user]) => user.groups && user.groups[schedule.target] === true)
             .map(([key]) => key);
@@ -94,6 +91,17 @@ exports.scheduledPush = onSchedule(
         functions.logger.info(
           `푸시 전송 완료: ${schedule.title} / ${currentTime} / 성공 ${res.successCount}, 실패 ${res.failureCount}`,
         );
+
+        // 푸시 보낸 기록 RTDB에 저장
+        await db.ref("/pushMessages").push({
+          senderId: "시스템", // 필요 시 변경 가능
+          receiverGroup: schedule.target,
+          title: schedule.title,
+          body: schedule.message,
+          sentAt: now.toISOString(),
+          successCount: res.successCount,
+          failureCount: res.failureCount,
+        });
 
         // 단일 전송일 경우에만 isSent 마킹
         if (!schedule.repeat || schedule.repeat === "none") {

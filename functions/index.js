@@ -7,9 +7,10 @@ exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
 // ✅ 이미 초기화된 경우 다시 하지 않음
 if (!admin.apps.length) {
-  admin.initializeApp();
+  admin.initializeApp({
+    databaseURL: "https://web-push-test-mhlee-default-rtdb.firebaseio.com",
+  });
 }
-
 functions.setGlobalOptions({
   maxInstances: 10,
 });
@@ -22,12 +23,15 @@ app.use(express.json());
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
   try {
-    const { token, title, body } = req.body;
+    let { token, title, body, senderId, receiverId } = req.body;
     logger.info("req.body:", req.body);
 
     if (!token || !title || !body) {
       return res.status(400).send("token, title, body가 필요합니다.");
     }
+
+    senderId = typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자";
+    receiverId = typeof receiverId === "string" && receiverId.trim() !== "" ? receiverId : "unknown";
 
     const message = {
       data: { title, body },
@@ -36,6 +40,16 @@ app.post("/", async (req, res) => {
 
     const response = await admin.messaging().send(message);
     logger.info("푸시 전송 성공:", response);
+
+    // DB 저장 (보낸사람 / 받는사람 기록)
+    await admin.database().ref("/pushMessages").push({
+      senderId,
+      receiverIds: [receiverId], // 단일 수신자라도 배열로 저장
+      title,
+      body,
+      timestamp: Date.now(),
+    });
+
     res.status(200).send("푸시 전송 성공");
   } catch (error) {
     logger.error("푸시 전송 실패:", error);
@@ -43,10 +57,10 @@ app.post("/", async (req, res) => {
   }
 });
 
-// 전체 사용자에게 푸시 보내기
+
 app.post("/broadcast/all", async (req, res) => {
   try {
-    const { title, body } = req.body;
+    const { title, body, senderId } = req.body;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -75,7 +89,6 @@ app.post("/broadcast/all", async (req, res) => {
     let failureCount = 0;
     const failedTokens = [];
 
-    // 500개씩 나눠서 전송
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batchTokens = tokens.slice(i, i + BATCH_SIZE);
 
@@ -101,6 +114,19 @@ app.post("/broadcast/all", async (req, res) => {
       logger.warn("푸시 실패한 토큰:", failedTokens);
     }
 
+    // 푸시 발송 기록 저장
+    const receiverIds = Object.values(tokensData)
+      .map((item) => item.id)
+      .filter((id) => typeof id === "string" && id.length > 0);
+
+    await admin.database().ref("/pushMessages").push({
+      senderId: typeof senderId === "string" && senderId.length > 0 ? senderId : "관리자",
+      receiverIds,
+      title,
+      body,
+      timestamp: Date.now(),
+    });
+
     res.status(200).json({ successCount, failureCount, failedTokens });
   } catch (error) {
     logger.error("전체 푸시 전송 실패:", error);
@@ -111,7 +137,7 @@ app.post("/broadcast/all", async (req, res) => {
 
 app.post("/broadcast", async (req, res) => {
   try {
-    const { title, body } = req.body;
+    const { title, body, senderId } = req.body;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -141,7 +167,7 @@ app.post("/broadcast", async (req, res) => {
     const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
 
     const tokens = Object.values(tokensData)
-      .filter((entry) => targetUserIds.includes(entry.id)) // 사용자 이름 기준 매칭
+      .filter((entry) => targetUserIds.includes(entry.id))
       .map((entry) => entry.fcmToken)
       .filter((token) => typeof token === "string" && token.length > 0);
 
@@ -174,6 +200,15 @@ app.post("/broadcast", async (req, res) => {
 
     logger.info(`클라이언트 그룹 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
+    // ✅ 푸시 발송 기록 저장
+    await admin.database().ref("/pushMessages").push({
+      senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
+      receiverIds: targetUserIds,
+      title,
+      body,
+      timestamp: Date.now(),
+    });
+
     res.status(200).json({ successCount, failureCount, failedTokens });
   } catch (error) {
     logger.error("클라이언트 그룹 푸시 실패:", error);
@@ -184,7 +219,7 @@ app.post("/broadcast", async (req, res) => {
 
 app.post("/broadcast/users", async (req, res) => {
   try {
-    const { ids, title, body } = req.body;
+    const { ids, title, body, senderId } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0 || !title || !body) {
       return res.status(400).send("ids (배열), title, body가 필요합니다.");
@@ -229,6 +264,15 @@ app.post("/broadcast/users", async (req, res) => {
 
     logger.info(`지정 사용자 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
+    // ✅ 푸시 발송 기록 저장
+    await admin.database().ref("/pushMessages").push({
+      senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
+      receiverIds: ids,
+      title,
+      body,
+      timestamp: Date.now(),
+    });
+
     res.status(200).json({ successCount, failureCount, failedTokens });
   } catch (error) {
     logger.error("지정 사용자 푸시 실패:", error);
@@ -238,7 +282,7 @@ app.post("/broadcast/users", async (req, res) => {
 
 app.post("/broadcast/group", async (req, res) => {
   try {
-    const { title, body, groups } = req.body;
+    const { title, body, groups, senderId } = req.body;
 
     if (!title || !body || !Array.isArray(groups) || groups.length === 0) {
       return res.status(400).send("title, body, groups 배열이 필요합니다.");
@@ -252,7 +296,7 @@ app.post("/broadcast/group", async (req, res) => {
 
     const userInfos = userInfosSnap.val();
 
-    // ✅ groups 중 하나라도 true인 유저 필터링
+    // groups 중 하나라도 true인 유저 필터링
     const targetUserIds = Object.entries(userInfos)
       .filter(([_, userData]) =>
         typeof userData.groups === "object" &&
@@ -304,10 +348,54 @@ app.post("/broadcast/group", async (req, res) => {
       `그룹 푸시 완료 (groups: ${groups.join(", ")}): 성공 ${successCount}, 실패 ${failureCount}`,
     );
 
+    // ✅ 푸시 발송 기록 저장
+    await admin.database().ref("/pushMessages").push({
+      senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
+      receiverGroups: groups,
+      receiverIds: targetUserIds,
+      title,
+      body,
+      timestamp: Date.now(),
+    });
+
     res.status(200).json({ successCount, failureCount, failedTokens });
   } catch (error) {
     logger.error("그룹 푸시 실패:", error);
     res.status(500).send("그룹 푸시 실패");
+  }
+});
+
+app.get("/push/history/:userId", async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    const snapshot = await admin.database().ref("/pushMessages").once("value");
+    if (!snapshot.exists()) {
+      return res.status(200).json([]);
+    }
+
+    const result = [];
+    snapshot.forEach((child) => {
+      const data = child.val();
+      const isSender = data.senderId === userId;
+      const isReceiver = Array.isArray(data.receiverIds) && data.receiverIds.includes(userId);
+
+      if (isSender || isReceiver) {
+        result.push({
+          id: child.key,
+          ...data,
+          direction: isSender ? "sent" : "received",
+        });
+      }
+    });
+
+    // 최신순 정렬
+    result.sort((a, b) => b.timestamp - a.timestamp);
+
+    res.status(200).json(result);
+  } catch (err) {
+    logger.error("푸시 히스토리 조회 실패:", err);
+    res.status(500).send("푸시 히스토리 조회 실패");
   }
 });
 
