@@ -121,9 +121,12 @@ app.post("/broadcast/all", async (req, res) => {
       .map((item) => item.id)
       .filter((id) => typeof id === "string" && id.length > 0);
 
+    // 중복 제거
+    const uniqueReceiverIds = [...new Set(receiverIds)];
+
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.length > 0 ? senderId : "관리자",
-      receiverIds,
+      uniqueReceiverIds,
       title,
       body,
       timestamp: Date.now(),
@@ -203,10 +206,14 @@ app.post("/broadcast", async (req, res) => {
 
     logger.info(`클라이언트 그룹 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
+
+    // 중복 제거
+    const uniqueReceiverIds = [...new Set(targetUserIds)];
+
     // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
-      receiverIds: targetUserIds,
+      receiverIds: uniqueReceiverIds,
       title,
       body,
       timestamp: Date.now(),
@@ -268,10 +275,14 @@ app.post("/broadcast/users", async (req, res) => {
 
     logger.info(`지정 사용자 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
+
+    // 중복 제거
+    const uniqueReceiverIds = [...new Set(ids)];
+
     // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
-      receiverIds: ids,
+      receiverIds: uniqueReceiverIds,
       title,
       body,
       timestamp: Date.now(),
@@ -353,12 +364,14 @@ app.post("/broadcast/group", async (req, res) => {
     logger.info(
       `그룹 푸시 완료 (groups: ${groups.join(", ")}): 성공 ${successCount}, 실패 ${failureCount}`,
     );
+    // 중복 제거
+    const uniqueReceiverIds = [...new Set(targetUserIds)];
 
     // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
       receiverGroups: groups,
-      receiverIds: targetUserIds,
+      receiverIds: uniqueReceiverIds,
       title,
       body,
       timestamp: Date.now(),

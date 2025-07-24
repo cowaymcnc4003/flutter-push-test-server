@@ -5,7 +5,7 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 
-// ✅ 여기서도 꼭 중복 초기화 방지!
+// ✅ 중복 초기화 방지
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -58,9 +58,18 @@ exports.scheduledPush = onSchedule(
 
       for (const schedule of dueSchedules) {
         let tokens = [];
+        let receiverIds = [];
 
         if (schedule.target === "All") {
-          tokens = Object.values(userTokens).map((u) => u.fcmToken);
+          tokens = Object.values(userTokens)
+            .map((u) => u.fcmToken)
+            .filter((token) => typeof token === "string" && token.length > 0);
+
+          receiverIds = Object.values(userTokens)
+            .map((u) => u.id)
+            .filter((id) => typeof id === "string" && id.trim() !== "");
+
+          receiverIds = [...new Set(receiverIds)]; // 중복 제거
         } else {
           const targetUserIds = Object.entries(userInfos)
             .filter(([_, user]) => user.groups && user.groups[schedule.target] === true)
@@ -68,10 +77,13 @@ exports.scheduledPush = onSchedule(
 
           tokens = Object.values(userTokens)
             .filter((t) => targetUserIds.includes(t.id))
-            .map((t) => t.fcmToken);
-        }
+            .map((t) => t.fcmToken)
+            .filter((token) => typeof token === "string" && token.length > 0);
 
-        tokens = tokens.filter((token) => typeof token === "string" && token.length > 0);
+          receiverIds = targetUserIds;
+
+          receiverIds = [...new Set(receiverIds)]; // 중복 제거
+        }
 
         if (tokens.length === 0) {
           functions.logger.warn(`푸시 대상 없음: ${schedule.title}`);
@@ -92,14 +104,16 @@ exports.scheduledPush = onSchedule(
           `푸시 전송 완료: ${schedule.title} / ${currentTime} / 성공 ${res.successCount}, 실패 ${res.failureCount}`,
         );
 
-        // ✅ senderId: 스케줄에 userId가 있으면 사용, 없으면 "시스템"
-        const senderId = typeof schedule.idName === "string" && schedule.idName.trim() !== "" ?
-          schedule.idName :
-          "시스템";
+        // senderId: 스케줄에 idName 있으면 사용, 없으면 "시스템"
+        const senderId =
+          typeof schedule.idName === "string" && schedule.idName.trim() !== "" ?
+            schedule.idName :
+            "시스템";
 
         await db.ref("/pushMessages").push({
           senderId,
           receiverGroup: schedule.target,
+          receiverIds,
           title: schedule.title,
           body: schedule.message,
           sentAt: now.toISOString(),
