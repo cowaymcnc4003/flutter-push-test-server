@@ -23,9 +23,9 @@ app.use(express.json());
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
   try {
-    let { token, title, body, userId, receiverId } = req.body;
+    let { token, title, body, id, receiverId } = req.body;
     logger.info("req.body:", req.body);
-    let senderId = userId;
+    let senderId = id;
 
     if (!token || !title || !body) {
       return res.status(400).send("token, title, body가 필요합니다.");
@@ -61,8 +61,8 @@ app.post("/", async (req, res) => {
 
 app.post("/broadcast/all", async (req, res) => {
   try {
-    const { title, body, userId } = req.body;
-    const senderId = userId;
+    const { title, body, id } = req.body;
+    const senderId = id;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -139,8 +139,8 @@ app.post("/broadcast/all", async (req, res) => {
 
 app.post("/broadcast", async (req, res) => {
   try {
-    const { title, body, userId } = req.body;
-    const senderId = userId;
+    const { title, body, id } = req.body;
+    const senderId = id;
 
     if (!title || !body) {
       return res.status(400).send("title, body가 필요합니다.");
@@ -222,8 +222,8 @@ app.post("/broadcast", async (req, res) => {
 
 app.post("/broadcast/users", async (req, res) => {
   try {
-    const { ids, title, body, userId } = req.body;
-    const senderId = userId;
+    const { ids, title, body, id } = req.body;
+    const senderId = id;
 
     if (!Array.isArray(ids) || ids.length === 0 || !title || !body) {
       return res.status(400).send("ids (배열), title, body가 필요합니다.");
@@ -286,9 +286,9 @@ app.post("/broadcast/users", async (req, res) => {
 
 app.post("/broadcast/group", async (req, res) => {
   try {
-    const { title, body, groups, userId } = req.body;
+    const { title, body, groups, id } = req.body;
 
-    const senderId = userId;
+    const senderId = id;
 
     if (!title || !body || !Array.isArray(groups) || groups.length === 0) {
       return res.status(400).send("title, body, groups 배열이 필요합니다.");
@@ -371,8 +371,8 @@ app.post("/broadcast/group", async (req, res) => {
   }
 });
 
-app.get("/push/history/:userId", async (req, res) => {
-  const userId = req.params.userId;
+app.get("/push/history/:id", async (req, res) => {
+  const id = req.params.id;
 
   try {
     const snapshot = await admin.database().ref("/pushMessages").once("value");
@@ -383,8 +383,8 @@ app.get("/push/history/:userId", async (req, res) => {
     const result = [];
     snapshot.forEach((child) => {
       const data = child.val();
-      const isSender = data.senderId === userId;
-      const isReceiver = Array.isArray(data.receiverIds) && data.receiverIds.includes(userId);
+      const isSender = data.senderId === id;
+      const isReceiver = Array.isArray(data.receiverIds) && data.receiverIds.includes(id);
 
       if (isSender || isReceiver) {
         result.push({

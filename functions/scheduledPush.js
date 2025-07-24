@@ -93,8 +93,8 @@ exports.scheduledPush = onSchedule(
         );
 
         // ✅ senderId: 스케줄에 userId가 있으면 사용, 없으면 "시스템"
-        const senderId = typeof schedule.userId === "string" && schedule.userId.trim() !== "" ?
-          schedule.userId :
+        const senderId = typeof schedule.idName === "string" && schedule.idName.trim() !== "" ?
+          schedule.idName :
           "시스템";
 
         await db.ref("/pushMessages").push({
