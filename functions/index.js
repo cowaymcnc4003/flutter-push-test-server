@@ -113,7 +113,7 @@ app.post("/broadcast/all", async (req, res) => {
 
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.length > 0 ? senderId : "관리자",
-      uniqueReceiverIds,
+      receiverIds: uniqueReceiverIds,
       title,
       body,
       timestamp: Date.now(),
