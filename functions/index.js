@@ -236,4 +236,79 @@ app.post("/broadcast/users", async (req, res) => {
   }
 });
 
+app.post("/broadcast/group", async (req, res) => {
+  try {
+    const { title, body, groups } = req.body;
+
+    if (!title || !body || !Array.isArray(groups) || groups.length === 0) {
+      return res.status(400).send("title, body, groups 배열이 필요합니다.");
+    }
+
+    // userInfos 조회
+    const userInfosSnap = await admin.database().ref("/userInfos").once("value");
+    if (!userInfosSnap.exists()) {
+      return res.status(404).send("userInfos가 비어 있습니다.");
+    }
+
+    const userInfos = userInfosSnap.val();
+
+    // ✅ groups 중 하나라도 true인 유저 필터링
+    const targetUserIds = Object.entries(userInfos)
+      .filter(([_, userData]) =>
+        typeof userData.groups === "object" &&
+        groups.some((groupName) => userData.groups[groupName] === true),
+      )
+      .map(([userKey]) => userKey);
+
+    if (targetUserIds.length === 0) {
+      return res.status(404).send("해당 그룹 사용자들이 없습니다.");
+    }
+
+    // userTokens 조회
+    const tokensSnap = await admin.database().ref("/userTokens").once("value");
+    const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
+
+    const tokens = Object.values(tokensData)
+      .filter((entry) => targetUserIds.includes(entry.id))
+      .map((entry) => entry.fcmToken)
+      .filter((token) => typeof token === "string" && token.length > 0);
+
+    if (tokens.length === 0) {
+      return res.status(404).send("해당 그룹의 유효한 푸시 토큰이 없습니다.");
+    }
+
+    // 푸시 전송
+    const BATCH_SIZE = 500;
+    let successCount = 0;
+    let failureCount = 0;
+    const failedTokens = [];
+
+    for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+      const batchTokens = tokens.slice(i, i + BATCH_SIZE);
+      const message = {
+        data: { title, body },
+        tokens: batchTokens,
+      };
+
+      const response = await admin.messaging().sendEachForMulticast(message);
+
+      successCount += response.successCount;
+      failureCount += response.failureCount;
+
+      response.responses.forEach((resp, idx) => {
+        if (!resp.success) failedTokens.push(batchTokens[idx]);
+      });
+    }
+
+    logger.info(
+      `그룹 푸시 완료 (groups: ${groups.join(", ")}): 성공 ${successCount}, 실패 ${failureCount}`,
+    );
+
+    res.status(200).json({ successCount, failureCount, failedTokens });
+  } catch (error) {
+    logger.error("그룹 푸시 실패:", error);
+    res.status(500).send("그룹 푸시 실패");
+  }
+});
+
 exports.sendPush = onRequest(app);

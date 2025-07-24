@@ -19,6 +19,7 @@ module.exports = {
     "space-before-blocks": "off",
     "object-curly-spacing": "off",
     "indent": "off",
+    "linebreak-style": ["error", "windows"],
   },
   overrides: [
     {
