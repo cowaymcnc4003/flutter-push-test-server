@@ -3,6 +3,7 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
+const { getDatabase } = require("firebase-admin/database");
 dayjs.extend(utc);
 
 // ✅ 중복 초기화 방지
@@ -131,6 +132,24 @@ exports.scheduledPush = onSchedule(
     } catch (err) {
       functions.logger.error("스케줄 푸시 오류", err);
       return null;
+    }
+  },
+);
+
+exports.clearPushMessagesDaily = onSchedule(
+  {
+    schedule: "0 15 * * *", // UTC 기준 15시 = 한국시간 자정 (0시)
+    timeZone: "Asia/Seoul", // 한국 시간 기준으로 스케줄 설정
+  },
+  async (event) => {
+    const db = getDatabase();
+    const ref = db.ref("pushMessages");
+
+    try {
+      await ref.remove();
+      console.log("✅ pushMessages 데이터 모두 삭제 완료");
+    } catch (error) {
+      console.error("❌ pushMessages 삭제 중 오류:", error);
     }
   },
 );
