@@ -5,7 +5,6 @@ const admin = require("firebase-admin");
 const express = require("express");
 exports.scheduledPush = require("./scheduledPush").scheduledPush;
 
-// ✅ 이미 초기화된 경우 다시 하지 않음
 if (!admin.apps.length) {
   admin.initializeApp({
     databaseURL: "https://web-push-test-mhlee-default-rtdb.firebaseio.com",
@@ -20,9 +19,28 @@ const cors = require("cors");
 app.use(cors());
 app.use(express.json());
 
+const MAX_ALLOWED_RECORDS = 1000000; // 100만 건 제한
+
+/**
+ * 지정된 RTDB 경로의 자식 노드(레코드) 개수를 비동기로 조회합니다.
+ * @param {string} path - RTDB 경로
+ * @return {Promise<number>} - 해당 경로 하위 자식 노드 개수
+ */
+async function checkDataCount(path) {
+  const snapshot = await admin.database().ref(path).once("value");
+  if (!snapshot.exists()) return 0;
+  return snapshot.numChildren();
+}
+
 // 개별 푸시 보내기
 app.post("/", async (req, res) => {
   try {
+    // 제한체크 (예: /userTokens 수 체크 필요없으면 생략 가능)
+    // const userTokensCount = await checkDataCount("/userTokens");
+    // if (userTokensCount >= MAX_ALLOWED_RECORDS) {
+    //   return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    // }
+
     const { token, title, body } = req.body;
     logger.info("req.body:", req.body);
 
@@ -45,9 +63,15 @@ app.post("/", async (req, res) => {
   }
 });
 
-
+// 전체 사용자 대상 푸시
 app.post("/broadcast/all", async (req, res) => {
   try {
+    // 100만 건 제한 체크
+    const userTokensCount = await checkDataCount("/userTokens");
+    if (userTokensCount >= MAX_ALLOWED_RECORDS) {
+      return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    }
+
     const { title, body, id } = req.body;
     const senderId = id;
 
@@ -55,16 +79,13 @@ app.post("/broadcast/all", async (req, res) => {
       return res.status(400).send("title, body가 필요합니다.");
     }
 
-    // RTDB에서 userTokens 읽기
     const snapshot = await admin.database().ref("/userTokens").once("value");
-
     if (!snapshot.exists()) {
       return res.status(404).send("토큰 데이터가 없습니다.");
     }
 
     const tokensData = snapshot.val();
 
-    // tokensData 구조에 맞게 fcmToken만 추출
     const tokens = Object.values(tokensData)
       .map((item) => item.fcmToken)
       .filter((token) => typeof token === "string" && token.length > 0);
@@ -103,12 +124,10 @@ app.post("/broadcast/all", async (req, res) => {
       logger.warn("푸시 실패한 토큰:", failedTokens);
     }
 
-    // 푸시 발송 기록 저장
     const receiverIds = Object.values(tokensData)
       .map((item) => item.id)
       .filter((id) => typeof id === "string" && id.length > 0);
 
-    // 중복 제거
     const uniqueReceiverIds = [...new Set(receiverIds)];
 
     await admin.database().ref("/pushMessages").push({
@@ -126,9 +145,15 @@ app.post("/broadcast/all", async (req, res) => {
   }
 });
 
-
+// 클라이언트 그룹 푸시
 app.post("/broadcast", async (req, res) => {
   try {
+    // 100만 건 제한 체크
+    const userInfosCount = await checkDataCount("/userInfos");
+    if (userInfosCount >= MAX_ALLOWED_RECORDS) {
+      return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    }
+
     const { title, body, id } = req.body;
     const senderId = id;
 
@@ -136,7 +161,6 @@ app.post("/broadcast", async (req, res) => {
       return res.status(400).send("title, body가 필요합니다.");
     }
 
-    // userInfos 조회
     const userInfosSnap = await admin.database().ref("/userInfos").once("value");
     if (!userInfosSnap.exists()) {
       return res.status(404).send("userInfos가 비어 있습니다.");
@@ -155,7 +179,6 @@ app.post("/broadcast", async (req, res) => {
       return res.status(404).send("클라이언트 그룹 사용자가 없습니다.");
     }
 
-    // userTokens에서 해당 유저들의 FCM 토큰 추출
     const tokensSnap = await admin.database().ref("/userTokens").once("value");
     const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
 
@@ -168,7 +191,6 @@ app.post("/broadcast", async (req, res) => {
       return res.status(404).send("해당 그룹에 유효한 푸시 토큰이 없습니다.");
     }
 
-    // 푸시 전송
     const BATCH_SIZE = 500;
     let successCount = 0;
     let failureCount = 0;
@@ -193,11 +215,8 @@ app.post("/broadcast", async (req, res) => {
 
     logger.info(`클라이언트 그룹 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
-
-    // 중복 제거
     const uniqueReceiverIds = [...new Set(targetUserIds)];
 
-    // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
       receiverIds: uniqueReceiverIds,
@@ -213,9 +232,15 @@ app.post("/broadcast", async (req, res) => {
   }
 });
 
-
+// 지정 사용자 푸시
 app.post("/broadcast/users", async (req, res) => {
   try {
+    // 100만 건 제한 체크
+    const userTokensCount = await checkDataCount("/userTokens");
+    if (userTokensCount >= MAX_ALLOWED_RECORDS) {
+      return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    }
+
     const { ids, title, body, id } = req.body;
     const senderId = id;
 
@@ -223,11 +248,9 @@ app.post("/broadcast/users", async (req, res) => {
       return res.status(400).send("ids (배열), title, body가 필요합니다.");
     }
 
-    // RTDB에서 userTokens 가져오기
     const tokensSnap = await admin.database().ref("/userTokens").once("value");
     const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
 
-    // 선택된 ID 목록에 해당하는 토큰만 추출
     const tokens = Object.values(tokensData)
       .filter((entry) => ids.includes(entry.id))
       .map((entry) => entry.fcmToken)
@@ -237,7 +260,6 @@ app.post("/broadcast/users", async (req, res) => {
       return res.status(404).send("해당 ID에 해당하는 유효한 푸시 토큰이 없습니다.");
     }
 
-    // 푸시 전송
     const BATCH_SIZE = 500;
     let successCount = 0;
     let failureCount = 0;
@@ -262,11 +284,8 @@ app.post("/broadcast/users", async (req, res) => {
 
     logger.info(`지정 사용자 푸시 완료: 성공 ${successCount}, 실패 ${failureCount}`);
 
-
-    // 중복 제거
     const uniqueReceiverIds = [...new Set(ids)];
 
-    // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
       receiverIds: uniqueReceiverIds,
@@ -282,8 +301,15 @@ app.post("/broadcast/users", async (req, res) => {
   }
 });
 
+// 그룹 푸시
 app.post("/broadcast/group", async (req, res) => {
   try {
+    // 100만 건 제한 체크
+    const userInfosCount = await checkDataCount("/userInfos");
+    if (userInfosCount >= MAX_ALLOWED_RECORDS) {
+      return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    }
+
     const { title, body, groups, id } = req.body;
 
     const senderId = id;
@@ -292,7 +318,6 @@ app.post("/broadcast/group", async (req, res) => {
       return res.status(400).send("title, body, groups 배열이 필요합니다.");
     }
 
-    // userInfos 조회
     const userInfosSnap = await admin.database().ref("/userInfos").once("value");
     if (!userInfosSnap.exists()) {
       return res.status(404).send("userInfos가 비어 있습니다.");
@@ -300,7 +325,6 @@ app.post("/broadcast/group", async (req, res) => {
 
     const userInfos = userInfosSnap.val();
 
-    // groups 중 하나라도 true인 유저 필터링
     const targetUserIds = Object.entries(userInfos)
       .filter(([_, userData]) =>
         typeof userData.groups === "object" &&
@@ -312,7 +336,6 @@ app.post("/broadcast/group", async (req, res) => {
       return res.status(404).send("해당 그룹 사용자들이 없습니다.");
     }
 
-    // userTokens 조회
     const tokensSnap = await admin.database().ref("/userTokens").once("value");
     const tokensData = tokensSnap.exists() ? tokensSnap.val() : {};
 
@@ -325,7 +348,6 @@ app.post("/broadcast/group", async (req, res) => {
       return res.status(404).send("해당 그룹의 유효한 푸시 토큰이 없습니다.");
     }
 
-    // 푸시 전송
     const BATCH_SIZE = 500;
     let successCount = 0;
     let failureCount = 0;
@@ -351,10 +373,9 @@ app.post("/broadcast/group", async (req, res) => {
     logger.info(
       `그룹 푸시 완료 (groups: ${groups.join(", ")}): 성공 ${successCount}, 실패 ${failureCount}`,
     );
-    // 중복 제거
+
     const uniqueReceiverIds = [...new Set(targetUserIds)];
 
-    // ✅ 푸시 발송 기록 저장
     await admin.database().ref("/pushMessages").push({
       senderId: typeof senderId === "string" && senderId.trim() !== "" ? senderId : "관리자",
       receiverGroups: groups,
@@ -371,6 +392,7 @@ app.post("/broadcast/group", async (req, res) => {
   }
 });
 
+// 푸시 히스토리 조회
 app.post("/push/history", async (req, res) => {
   const { id } = req.body;
 
@@ -379,6 +401,12 @@ app.post("/push/history", async (req, res) => {
   }
 
   try {
+    // 제한 체크 - 히스토리 저장 개수도 너무 많으면 차단 가능
+    const pushMessagesCount = await checkDataCount("/pushMessages");
+    if (pushMessagesCount >= MAX_ALLOWED_RECORDS) {
+      return res.status(403).send("데이터 용량 초과로 읽기/쓰기 제한됨");
+    }
+
     const snapshot = await admin.database().ref("/pushMessages").once("value");
     if (!snapshot.exists()) {
       return res.status(200).json([]);
@@ -399,7 +427,6 @@ app.post("/push/history", async (req, res) => {
       }
     });
 
-    // 최신순 정렬
     result.sort((a, b) => b.timestamp - a.timestamp);
 
     res.status(200).json(result);

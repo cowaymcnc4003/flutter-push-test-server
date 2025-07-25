@@ -25,6 +25,15 @@ exports.scheduledPush = onSchedule(
     const db = admin.database();
 
     try {
+      // 총 푸시 건수 체크 (예: /pushCount/count)
+      const countSnap = await db.ref("/pushCount/count").once("value");
+      const pushCount = countSnap.exists() ? countSnap.val() : 0;
+
+      if (pushCount >= 1000000) {
+        functions.logger.warn(`푸시 발송 제한 도달: 현재 카운트 ${pushCount} (100만 건 이상)`);
+        return null; // 제한 초과 시 푸시 전송 중단
+      }
+
       const schedulesSnap = await db.ref("/pushSchedules").once("value");
       if (!schedulesSnap.exists()) return null;
 
@@ -91,6 +100,14 @@ exports.scheduledPush = onSchedule(
           continue;
         }
 
+        // 추가 제한: 만약 현재 pushCount + 전송 대상 수가 100만 초과하면 중단
+        if (pushCount + tokens.length > 1000000) {
+          functions.logger.warn(
+            `푸시 발송 중단: 현재 카운트 ${pushCount} + 전송 대상 ${tokens.length} = 초과 100만 건`,
+          );
+          continue;
+        }
+
         const message = {
           data: {
             title: schedule.title,
@@ -126,6 +143,11 @@ exports.scheduledPush = onSchedule(
         if (!schedule.repeat || schedule.repeat === "none") {
           await db.ref(`/pushSchedules/${schedule.id}/isSent`).set(true);
         }
+
+        // 푸시 전송 성공 카운트 누적 업데이트
+        await db.ref("/pushCount/count").transaction((current) => {
+          return (current || 0) + res.successCount;
+        });
       }
 
       return null;
