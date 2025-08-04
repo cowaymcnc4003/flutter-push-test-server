@@ -137,6 +137,7 @@ exports.scheduledPush = onSchedule(
           sentAt: now.toISOString(),
           successCount: res.successCount,
           failureCount: res.failureCount,
+          timestamp: Date.now(),
         });
 
         // 단일 전송일 경우에만 isSent 마킹
